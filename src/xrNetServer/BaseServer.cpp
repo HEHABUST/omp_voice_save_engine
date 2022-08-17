@@ -20,6 +20,7 @@ BaseServer::BaseServer(CTimer* timer, BOOL	Dedicated)
 	: m_bDedicated(Dedicated)
 #ifdef PROFILE_CRITICAL_SECTIONS
 	, csMessage(MUTEX_PROFILE_ID(BaseServer::csMessage))
+	, csMessagesQueue(MUTEX_PROFILE_ID(BaseServer::csMessagesQueue))
 #endif // PROFILE_CRITICAL_SECTIONS
 {
 	SV_Client = NULL;
@@ -499,13 +500,13 @@ void BaseServer::_Recieve(const void* data, u32 data_size, u32 param)
 		return;
 	}
 
-	NET_Packet  packet;
-	ClientID    id;
+	csMessagesQueue.Enter();
 
-	id.set(param);
-	packet.construct(data, data_size);
 
-	csMessage.Enter();
+	m_messagesQueue.emplace_back(data, data_size, param);
+
+
+	csMessagesQueue.Leave();
 
 	/*if (psNET_Flags.test(NETFLAG_LOG_SV_PACKETS))
 	{
@@ -516,12 +517,29 @@ void BaseServer::_Recieve(const void* data, u32 data_size, u32 param)
 			pSvNetLog->LogPacket(TimeGlobal(device_timer), &packet, TRUE);
 	}*/
 
-	u32	result = OnMessage(packet, id);
+}
 
-	csMessage.Leave();
+void BaseServer::ProcessMessagesQueue()
+{
+	// Pavel: Calls from xrServer (from game thread)
+	csMessagesQueue.Enter();
 
-	if (result)
-		SendBroadcast(id, packet, result);
+	if (!m_messagesQueue.empty())
+	{
+		for (auto& msg : m_messagesQueue)
+		{
+			csMessage.Enter();
+			u32	result = OnMessage(msg.P, msg.Id);
+			csMessage.Leave();
+
+			if (result)
+				SendBroadcast(msg.Id, msg.P, result);
+		}
+		m_messagesQueue.clear();
+	}
+
+	csMessagesQueue.Leave();
+
 }
 
 #pragma endregion

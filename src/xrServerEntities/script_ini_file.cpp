@@ -22,6 +22,11 @@ CScriptIniFile::CScriptIniFile		(LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtS
 {
 }
 
+CScriptIniFile::CScriptIniFile(LPCSTR path, LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart)
+	: inherited(update_custom(path, szFileName), ReadOnly, bLoadAtStart)
+{
+}
+
 CScriptIniFile::~CScriptIniFile		()
 {
 }
@@ -31,6 +36,18 @@ LPCSTR	CScriptIniFile::update		(LPCSTR file_name)
 	string_path			S1;
 	FS.update_path		(S1,"$game_config$",file_name);
 	return				(*shared_str(S1));
+}
+
+LPCSTR CScriptIniFile::update_custom(LPCSTR path, LPCSTR file_name)
+{
+	string_path path_file;
+	FS.update_path(path_file, path, file_name);
+	return (*shared_str(path_file));
+}
+
+void CScriptIniFile::save()
+{
+	inherited::save_as(inherited::fname());
 }
 
 bool CScriptIniFile::line_exist		(LPCSTR S, LPCSTR L)

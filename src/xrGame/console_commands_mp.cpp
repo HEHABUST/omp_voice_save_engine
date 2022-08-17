@@ -1190,8 +1190,8 @@ public:
 		if (g_dedicated_server)
 			cnt--;
 
-		Msg("- Total Players : %d", cnt);
-		Msg("- ----player list begin-----");
+		Msg("- Всего игроков : %d", cnt);
+		Msg("- ----Начало списка-----");
 		struct PlayersEnumerator
 		{
 			LPCSTR filter_string;
@@ -1212,7 +1212,7 @@ public:
 				DWORD dwPort		= 0;
 				Level().Server->GetClientAddress(client->ID, Address, &dwPort);
 				string512 tmp_string;
-				xr_sprintf(tmp_string, "- (player session id : %u), (name : %s), (ip: %s), (ping: %u), (money: %d);",
+				xr_sprintf(tmp_string, "- (Черный id : %u), (Логин : %s), (IP: %s), (Пинг: %u), (Деньги: %d);",
 					client->ID.value(),
 					l_pC->ps->getName(),
 					Address.to_string().c_str(),
@@ -1245,13 +1245,13 @@ public:
 			}
 		}
 		Level().Server->ForEachClientDo(tmp_functor);
-		Msg("- ----player list end-------");
+		Msg("- ----Конец списка-------");
 	};
 
 	virtual void	Info	(TInfo& I){xr_strcpy(I,"List Players. Format: \"sv_listplayers [ filter string ]\""); }
 };
 
-class CCC_Name : public IConsole_Command
+/*class CCC_Name : public IConsole_Command
 {
 public:
 	CCC_Name(LPCSTR N) : IConsole_Command(N)  { bLowerCaseArgs = false;	bEmptyArgsHandled = false; };
@@ -1307,7 +1307,7 @@ public:
 	}
 
 	virtual void	Info	(TInfo& I)	{xr_strcpy(I,"player name"); }
-};
+};*/
 
 
 class CCC_ListPlayers_Banned : public IConsole_Command {
@@ -2360,6 +2360,414 @@ public:
 	}
 };
 
+class CCC_SetNoClipForPlayer : public IConsole_Command {
+public:
+	CCC_SetNoClipForPlayer(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void	Execute(LPCSTR args)
+	{
+		if (!g_pGameLevel || !Level().Server) return;
+
+		game_sv_mp* srv = smart_cast<game_sv_mp*>(Level().Server->game);
+		if (!srv) return;
+
+		string1024 buff;
+		exclude_raid_from_args(args, buff, sizeof(buff));
+
+		ClientID client_id(0);
+		u32 tmp_client_id;
+		u32 value;
+		if (sscanf_s(buff, "%u %u", &tmp_client_id, &value) != 2)
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set no clip for player. Format: \"sv_set_no_clip <player session id> <value>\"");
+			return;
+		}
+		client_id.set(tmp_client_id);
+
+		xrClientData* CL = static_cast<xrClientData*>(Level().Server->GetClientByID(client_id));
+		if (CL && CL->ps && (CL != Level().Server->GetServerClient()) && (value == 0 || value == 1))
+		{
+			if (value) CL->ps->setFlag(GAME_PLAYER_MP_NO_CLIP);
+			else CL->ps->resetFlag(GAME_PLAYER_MP_NO_CLIP);
+			srv->signal_Syncronize();
+		}
+		else
+		{
+			Msg("! Can't set no clip for player with client id %u", client_id.value());
+		}
+	}
+};
+
+class CCC_SetInvisForPlayer : public IConsole_Command {
+public:
+	CCC_SetInvisForPlayer(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void	Execute(LPCSTR args)
+	{
+		if (!g_pGameLevel || !Level().Server) return;
+
+		game_sv_mp* srv = smart_cast<game_sv_mp*>(Level().Server->game);
+		if (!srv) return;
+
+		string1024 buff;
+		exclude_raid_from_args(args, buff, sizeof(buff));
+
+		ClientID client_id(0);
+		u32 tmp_client_id;
+		u32 value;
+		
+		if (sscanf_s(buff, "%u %u", &tmp_client_id, &value) != 2)
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set no clip for player. Format: \"sv_set_invis <player session id> <value>\"");
+			return;
+		}
+
+		client_id.set(tmp_client_id);
+
+		xrClientData* CL = static_cast<xrClientData*>(Level().Server->GetClientByID(client_id));
+		if (CL && CL->ps && (CL != Level().Server->GetServerClient()) && (value == 0 || value == 1))
+		{
+			if (value) CL->ps->setFlag(GAME_PLAYER_MP_INVIS);
+			else CL->ps->resetFlag(GAME_PLAYER_MP_INVIS);
+			srv->signal_Syncronize();
+		}
+		else
+		{
+			Msg("! Can't set invis for player with client id %u", client_id.value());
+		}
+	}
+};
+
+class CCC_MovePlayerToRPoint : public IConsole_Command {
+public:
+	CCC_MovePlayerToRPoint(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void	Execute(LPCSTR args)
+	{
+		if (!g_pGameLevel || !Level().Server) return;
+
+		game_sv_mp* sv_game = smart_cast<game_sv_mp*>(Level().Server->game);
+		if (!sv_game) return;
+
+		string1024 buff;
+		exclude_raid_from_args(args, buff, sizeof(buff));
+
+		ClientID client_id(0);
+		u32 tmp_client_id;
+		if (sscanf_s(buff, "%u", &tmp_client_id) != 1)
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Move player to rpoint. Format: \"sv_move_player_to_rpoint <player session id>\"");
+			return;
+		}
+		client_id.set(tmp_client_id);
+
+		xrClientData* CL = static_cast<xrClientData*>(Level().Server->GetClientByID(client_id));
+		if (!CL || !CL->net_Ready || !CL->owner || !CL->ps || CL->ps->testFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD))
+		{
+			Msg("! Can't move player to rpoint %u", client_id.value());
+			return;
+		}
+
+		xr_vector<RPoint>& rpoints = sv_game->rpoints[CL->ps->team];
+		RPoint& rp = rpoints[::Random.randI(rpoints.size())];
+
+		sv_game->TeleportPlayerTo(client_id, rp.P, rp.A);
+	}
+};
+
+class CCC_SetGodModForPlayer : public IConsole_Command {
+public:
+	CCC_SetGodModForPlayer(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void	Execute(LPCSTR args)
+	{
+		if (!g_pGameLevel || !Level().Server) return;
+
+		game_sv_mp* srv = smart_cast<game_sv_mp*>(Level().Server->game);
+		if (!srv) return;
+
+		string1024 buff;
+		exclude_raid_from_args(args, buff, sizeof(buff));
+
+		ClientID client_id(0);
+		u32 tmp_client_id;
+		u32 value;
+		if (sscanf_s(buff, "%u %u", &tmp_client_id, &value) != 2)
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set god mode for player. Format: \"sv_set_god_mode <player session id> <value>\"");
+			return;
+		}
+		client_id.set(tmp_client_id);
+
+		xrClientData* CL = static_cast<xrClientData*>(Level().Server->GetClientByID(client_id));
+		if (CL && CL->ps && (CL != Level().Server->GetServerClient()) && (value == 0 || value == 1))
+		{
+			if (value) CL->ps->setFlag(GAME_PLAYER_MP_GOD_MODE);
+			else CL->ps->resetFlag(GAME_PLAYER_MP_GOD_MODE);
+			srv->signal_Syncronize();
+		}
+		else
+		{
+			Msg("! Can't set god mode for player with client id %u", client_id.value());
+		}
+	}
+};
+
+class CCC_AdmNoClip : public IConsole_Command {
+public:
+	CCC_AdmNoClip(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		u32 value = u32(-1);
+
+		if (sscanf(args, "%u", &value) == 1 && (value == 0 || value == 1))
+		{
+			NET_Packet		P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "sv_set_no_clip %u %u", Game().local_svdpnid.value(), value);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+		else
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set noclip for self. Format: \"adm_no_clip [0,1]\"");
+			return;
+		}
+	}
+};
+
+class CCC_AdmInvis : public IConsole_Command {
+public:
+	CCC_AdmInvis(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		u32 value = u32(-1);
+
+		if (sscanf(args, "%u", &value) == 1 && (value == 0 || value == 1))
+		{
+			NET_Packet		P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "sv_set_invis %u %u", Game().local_svdpnid.value(), value);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+		else
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set noclip for self. Format: \"adm_invis [0,1]\"");
+			return;
+		}
+	}
+};
+
+class CCC_AdmGodMode : public IConsole_Command {
+public:
+	CCC_AdmGodMode(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		u32 value = u32(-1);
+
+		if (sscanf(args, "%u", &value) == 1 && (value == 0 || value == 1))
+		{
+			NET_Packet		P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "sv_set_god_mode %u %u", Game().local_svdpnid.value(), value);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+		else
+		{
+			Msg("! ERROR: bad command parameters.");
+			Msg("Set noclip for self. Format: \"adm_god_mode [0,1]\"");
+			return;
+		}
+	}
+};
+
+
+class CCC_AdmUnlimatedAmmo : public IConsole_Command {
+public:
+	CCC_AdmUnlimatedAmmo(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (OnServer())
+		{
+			if (!g_pGameLevel || !Level().Server)
+				return;
+
+			game_sv_mp* srv = smart_cast<game_sv_mp*>(Level().Server->game);
+			
+			if (!srv)
+				return;
+
+			string1024 buff;
+			exclude_raid_from_args(args, buff, sizeof(buff));
+
+			ClientID client_id(0);
+			u32 tmp_client_id;
+ 
+			if (sscanf_s(buff, "%u", &tmp_client_id) != 1)
+			{
+				Msg("! ERROR: bad command parameters.");
+				Msg("Set god mode for player. Format: \"adm_unlimated_ammo <player session id>\"");
+				return;
+			}
+
+			client_id.set(tmp_client_id);
+
+			xrClientData* CL = static_cast<xrClientData*>(Level().Server->GetClientByID(client_id));
+
+			if (CL && CL->ps && (CL != Level().Server->GetServerClient()) )
+			{
+				if (!CL->ps->testFlag(GAME_PLAYER_MP_NO_UNLIMATED_AMMO))
+				{	 
+					//Msg("set Unlimated Ammo");
+ 					CL->ps->setFlag(GAME_PLAYER_MP_NO_UNLIMATED_AMMO);
+				}
+				else
+				{
+ 					CL->ps->resetFlag(GAME_PLAYER_MP_NO_UNLIMATED_AMMO);
+				}
+
+				srv->signal_Syncronize();
+			}
+			else
+			{
+				Msg("! Can't set god mode for player with client id %u", client_id.value());
+			}
+		}
+		else
+		{
+			NET_Packet P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "adm_unlimated_ammo %u", Game().local_svdpnid.value());
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+	}
+};
+ 
+class CCC_AdmRegisterAccount : public IConsole_Command {
+public:
+	CCC_AdmRegisterAccount(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (OnServer())
+		{
+			string_path filepath;
+
+			FS.update_path(filepath, "$mp_saves_logins$", "logins.ltx");
+
+			CInifile* file = xr_new<CInifile>(filepath, false, true);
+
+			string256 tmp, login, password;
+			exclude_raid_from_args(args, tmp, sizeof(tmp));
+
+			sscanf(tmp, "%s %s", &login, &password);
+
+			if (file)
+			{
+				file->w_string(login, "password", password);
+			}
+
+			file->save_as(filepath);
+		}
+		else
+		{
+			NET_Packet P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "adm_register_account %s %s", Core.UserName, Core.Password);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+	}
+};
+
+class CCC_AdmBanAccount : public IConsole_Command
+{
+public:
+	CCC_AdmBanAccount(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (OnServer())
+		{
+			string_path filepath;
+			FS.update_path(filepath, "$mp_saves_logins$", "logins.ltx");
+			CInifile* file = xr_new<CInifile>(filepath, false, true);
+
+			string256 tmp, login;
+			exclude_raid_from_args(args, tmp, sizeof(tmp));
+
+			sscanf(tmp, "%s", &login);
+
+			if (file && file->section_exist(login))
+				file->w_bool(login, "banned", true);
+
+			file->save_as(filepath);
+		}
+		else
+		{
+			NET_Packet P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "adm_ban_account %s", Core.UserName);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+	}
+};
+
+class CCC_AdmUnBanAccount : public IConsole_Command
+{
+public:
+	CCC_AdmUnBanAccount(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+
+	virtual void Execute(LPCSTR args)
+	{
+		if (OnServer())
+		{
+			string_path filepath;
+			FS.update_path(filepath, "$mp_saves_logins$", "logins.ltx");
+			CInifile* file = xr_new<CInifile>(filepath, false, true);
+
+			string256 tmp, login;
+			exclude_raid_from_args(args, tmp, sizeof(tmp));
+
+			sscanf(tmp, "%s", &login);
+
+			if (file && file->section_exist(login))
+				file->remove_line(login, "banned");
+
+			file->save_as(filepath);
+		}
+		else
+		{
+			NET_Packet P;
+			P.w_begin(M_REMOTE_CONTROL_CMD);
+			string128 str;
+			xr_sprintf(str, "adm_unban_account %s", Core.UserName);
+			P.w_stringZ(str);
+			Level().Send(P, net_flags(TRUE, TRUE));
+		}
+	}
+};
+
 void register_mp_console_commands()
 {
 	CMD1(CCC_SpawnToInventory,		"sv_spawn_to_player_inv");
@@ -2368,6 +2776,20 @@ void register_mp_console_commands()
 	CMD1(CCC_GSpawn,				"g_spawn"				);
 	CMD1(CCC_GSpawnToInventorySelf,	"g_spawn_to_self_inv"	);
 	CMD1(CCC_GSpawnToInventory,		"g_spawn_to_inv"		);
+
+	CMD1(CCC_SetNoClipForPlayer,	"sv_set_no_clip"		);
+	CMD1(CCC_SetInvisForPlayer,		"sv_set_invis"			);
+	CMD1(CCC_SetGodModForPlayer,	"sv_set_god_mode"		);
+	CMD1(CCC_AdmNoClip,				"adm_no_clip"			);
+	CMD1(CCC_AdmInvis,				"adm_invis"				);
+	CMD1(CCC_AdmGodMode,			"adm_god_mode"			);
+	CMD1(CCC_AdmUnlimatedAmmo,      "adm_unlimated_ammo");
+
+	CMD1(CCC_AdmRegisterAccount,	"adm_register_account");
+	CMD1(CCC_AdmBanAccount,			"adm_ban_account");
+	CMD1(CCC_AdmUnBanAccount,		"adm_unban_account");
+
+	CMD1(CCC_MovePlayerToRPoint,	"sv_move_player_to_rpoint");
 
 	CMD1(CCC_GiveMoneyToPlayer, "sv_give_money");
 	CMD1(CCC_TransferMoney, "transfer_money");
@@ -2544,7 +2966,7 @@ void register_mp_console_commands()
 #endif
 
 	CMD1(CCC_RadminCmd,		"ra");
-	CMD1(CCC_Name,			"name");
+	//CMD1(CCC_Name,			"name");
 	CMD1(CCC_SvStatus,		"sv_status");
 	CMD1(CCC_SvChat,		"chat");
 
@@ -2580,4 +3002,10 @@ void register_mp_console_commands()
 	CMD1(CCC_GameSpyProfile,				"gs_profile");
 	CMD4(CCC_Integer,						"sv_write_update_bin",				&g_sv_write_updates_bin, 0, 1);
 	CMD4(CCC_Integer,						"sv_traffic_optimization_level",	(int*)&g_sv_traffic_optimization_level, 0, 7);
+
+	// Voice Chat
+	CMD4(CCC_Float, "snd_volume_players", &psSoundVPlayers, 0, 1);
+	CMD4(CCC_Float, "snd_volume_recorder", &psSoundVRecorder, 0, 1);
+	CMD4(CCC_Integer, "snd_recorder_mode", &psSoundRecorderMode, 0, 1);
+	CMD4(CCC_Integer, "snd_recorder_denoise", &psSoundRecorderDenoise, 0, 1);
 }

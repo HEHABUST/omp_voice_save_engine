@@ -80,6 +80,11 @@ public:
 	virtual								~CActor				();
 
 public:
+	
+			bool						MpGodMode					() const				;
+			bool						MpNoClip					() const				;
+			bool						MpInvisibility				() const				;
+
 	virtual BOOL						AlwaysTheCrow				()						{ return TRUE; }
 
 	virtual CAttachmentOwner*			cast_attachment_owner		()						{return this;}
@@ -676,9 +681,8 @@ public:
 	virtual void				OnPrevWeaponSlot				();
 			void				SwitchNightVision				();
 			void				SwitchTorch						();
-#ifdef DEBUG
+
 			void				NoClipFly						(int cmd);
-#endif //DEBUG
 
 public:
 	

@@ -518,6 +518,7 @@ BOOL CWeapon::net_Spawn		(CSE_Abstract* DC)
 	m_ammoType						= E->ammo_type;
 	SetState						(E->wpn_state);
 	SetNextState					(E->wpn_state);
+	m_cur_scope						= E->m_cur_scope;
 	
 	m_DefaultCartridge.Load(m_ammoTypes[m_ammoType].c_str(), m_ammoType);
 	if(iAmmoElapsed) 
@@ -572,6 +573,8 @@ void CWeapon::net_Export(NET_Packet& P)
 	P.w_u8					(m_ammoType);
 	P.w_u8					((u8)GetState());
 	P.w_u8					((u8)IsZoomed());
+	P.w_u8					(m_cur_scope);
+
 }
 
 void CWeapon::net_Import(NET_Packet& P)
@@ -600,6 +603,9 @@ void CWeapon::net_Import(NET_Packet& P)
 
 	u8 Zoom;
 	P.r_u8					((u8)Zoom);
+
+	P.r_u8(m_cur_scope);
+
 
 	if (H_Parent() && H_Parent()->Remote())
 	{
@@ -1730,17 +1736,17 @@ void CWeapon::render_item_ui()
 
 bool CWeapon::unlimited_ammo() 
 { 
-	if (IsGameTypeSingle())
+	//if (IsGameTypeSingle())
 	{
 		if(m_pInventory)
 		{
 			return inventory_owner().unlimited_ammo() && m_DefaultCartridge.m_flags.test(CCartridge::cfCanBeUnlimited);
-		}else
+		}
+		else
 			return false;
 	}
 
-	return ((GameID() == eGameIDDeathmatch) && 
-			m_DefaultCartridge.m_flags.test(CCartridge::cfCanBeUnlimited)); 
+	//return ((GameID() == eGameIDDeathmatch) && m_DefaultCartridge.m_flags.test(CCartridge::cfCanBeUnlimited)); 
 			
 };
 

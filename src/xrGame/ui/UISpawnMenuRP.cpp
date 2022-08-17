@@ -12,10 +12,15 @@
 #include "uigamecustom.h"
 #include "game_cl_roleplay.h"
 
+#include "game_sv_roleplay.h"
+
 CUISpawnMenuRP::CUISpawnMenuRP()
 {
 	game_cl_mp* game = smart_cast<game_cl_mp*>(&Game());
 	team_buttons_count = game->GetTeamCount();
+
+	game_cl_roleplay* game_roleplay = smart_cast<game_cl_roleplay*>(&Game());
+	team_admin = game_roleplay->GetAdminTeam();
 
 	m_pBackground = xr_new<CUIStatic>();
 	m_pBackground->SetAutoDelete(true);
@@ -34,14 +39,24 @@ CUISpawnMenuRP::CUISpawnMenuRP()
 		m_pImages.push_back(xr_new<CUIStatix>());
 		AttachChild(m_pImages.back());
 	}
+
+	if (team_admin != 0) 
+	{
+		Image_AdminTeam = xr_new<CUIStatix>();
+		AttachChild(Image_AdminTeam);
+	}
+
 }
 
 CUISpawnMenuRP::~CUISpawnMenuRP()
 {
 	for (u32 i = 0; i < m_pImages.size(); i++)
 		xr_delete(m_pImages[i]);
+	
+	if (team_admin != 0)
+	xr_delete(Image_AdminTeam);
 }
-
+														     
 void CUISpawnMenuRP::Init()
 {
 	CUIXml xml_doc;
@@ -58,6 +73,32 @@ void CUISpawnMenuRP::Init()
 		xr_sprintf(node, "team_selector:image_%d", i);
 		CUIXmlInit::InitStatic(xml_doc, node, 0, m_pImages[i - 1]);
 	}
+
+	if (team_admin != 0) 
+	{
+		CUIXmlInit::InitStatic(xml_doc, "team_selector:image_admin", 0, Image_AdminTeam);
+		Image_AdminTeam->Show(false);
+	}
+
+}
+
+void CUISpawnMenuRP::Update()
+{
+	if (team_admin != 0)
+	{
+		if (Game().local_player->testFlag(GAME_PLAYER_HAS_ADMIN_RIGHTS))
+		{
+			if (!Image_AdminTeam->IsShown())
+				Image_AdminTeam->Show(true);
+
+		}
+		else
+		{
+			Image_AdminTeam->Show(false);
+		}
+	}
+
+	inherited::Update();
 }
 
 void CUISpawnMenuRP::SendMessage(CUIWindow *pWnd, s16 msg, void *pData)
@@ -71,6 +112,14 @@ void CUISpawnMenuRP::SendMessage(CUIWindow *pWnd, s16 msg, void *pData)
 			if (pWnd == m_pImages[i])
 				game->OnTeamSelect(i + 1);
 		}
+
+		if (team_admin != 0)
+		if (pWnd == Image_AdminTeam)
+		if (Image_AdminTeam->IsShown())
+		{
+			game->OnTeamSelect(team_admin);
+		}
+
 		HideDialog();
 	}
 }

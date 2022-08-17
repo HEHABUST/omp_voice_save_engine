@@ -22,6 +22,12 @@ float	psSoundVFactor			= 1.0f;
 float	psSoundVMusic			= 1.f;
 int		psSoundCacheSizeMB		= 32;
 
+float   psSoundVPlayers    = 1.f;
+
+float	psSoundVRecorder = 1.f;
+int		psSoundRecorderMode = 1;
+int		psSoundRecorderDenoise = 1;
+
 CSoundRender_Core*				SoundRender = 0;
 CSound_manager_interface*		Sound		= 0;
 
@@ -131,7 +137,7 @@ void CSoundRender_Core::env_load	()
 
 void CSoundRender_Core::env_unload	()
 {
-	// Unload 
+	// Unload1
 	if (s_environment)
 		s_environment->Unload	();
 	xr_delete					(s_environment);

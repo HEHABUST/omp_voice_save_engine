@@ -26,6 +26,7 @@ void game_sv_roleplay::LoadSettings()
 	m_teamSettings.clear();
 
 	m_uTeamCount = (u8)READ_IF_EXISTS(pSettings, r_u32, "roleplay_settings", "team_count", 0);
+	m_uTeamAdmin = (u8)READ_IF_EXISTS(pSettings, r_u32, "roleplay_settings", "team_admin", 0);
 
 	for (u8 team_index = 1; team_index < m_uTeamCount + 1; team_index++)
 	{
@@ -50,6 +51,31 @@ void game_sv_roleplay::LoadSettings()
 			m_teamSettings[team_index].DefaultItems.push_back(item_name);
 		};
 	}
+	
+	if (m_uTeamAdmin != 0)
+	{
+		xr_sprintf(sect, "roleplay_team_admin");
+
+		s32 money = pSettings->r_s32(sect, "start_money");
+		m_teamAdmin.StartMoney = money;
+
+		xr_strcpy(items_str, pSettings->r_string(sect, "start_items"));
+		u32 count = _GetItemCount(items_str);
+		for (u32 t = 0; t < count; ++t)
+		{
+			_GetItem(items_str, t, item_name);
+			m_teamAdmin.StartItems.push_back(item_name);
+		};
+
+		xr_strcpy(items_str, pSettings->r_string(sect, "default_items"));
+		count = _GetItemCount(items_str);
+		for (u32 t = 0; t < count; ++t)
+		{
+			_GetItem(items_str, t, item_name);
+			m_teamAdmin.DefaultItems.push_back(item_name);
+		};
+	}
+
 }
 
 void game_sv_roleplay::OnEvent(NET_Packet & tNetPacket, u16 type, u32 time, ClientID sender)
@@ -78,17 +104,37 @@ void game_sv_roleplay::OnPlayerSelectTeam(NET_Packet& P, ClientID sender)
 	CSE_ALifeCreatureActor	*pA = smart_cast<CSE_ALifeCreatureActor*>(xrCData->owner);
 	if (!pA) return;
 
+	if (m_uTeamAdmin != 0)
+	if (m_uTeamAdmin == ps->team)
+	{
+		for (auto item : m_teamAdmin.StartItems)
+		{
+			SpawnItemToActor(pA->ID, item.c_str());
+		}
+		
+		// set start money
+		ps->money_for_round = m_teamAdmin.StartMoney;
+
+		signal_Syncronize();
+
+		return;
+	}
+
 	if (m_teamSettings.count(ps->team) == 0) return;
 		
 	auto teamSettings = m_teamSettings[ps->team];
 
 	// spawn start items
+	if (ps->testFlag(GAME_PLAYER_MP_SAVE_LOADED))
 	for (auto &item : teamSettings.StartItems)
 	{
 		SpawnItemToActor(pA->ID, item.c_str());
 	}
+
 	// set start money
 	ps->money_for_round = teamSettings.StartMoney;
+
+	ps->setFlag(GAME_PLAYER_MP_SAVE_LOADED);
 
 	signal_Syncronize();
 }
@@ -113,14 +159,47 @@ void game_sv_roleplay::RespawnPlayer(ClientID id_who, bool NoSpectator)
 	if (!pA) return;
 	
 	SpawnItemToActor(pA->ID, "mp_players_rukzak");
-
-	if (m_teamSettings.count(ps->team) == 0) return;
+	 
+	if (m_uTeamAdmin != 0)
+	if (ps->team == m_uTeamAdmin)
+	{
+		for (auto& item : m_teamAdmin.DefaultItems)
+			SpawnItemToActor(pA->ID, item.c_str());
+		
+		return;
+	}
+	
+	if (ps->team == 0)
+	{
+		ps->team = 8;
+	}
+ 
+	if (m_teamSettings.count(ps->team) == 0)
+		return;
 
 	auto teamSettings = m_teamSettings[ps->team];
-	for (auto &item : teamSettings.DefaultItems)
+
+	if (ps->testFlag(GAME_PLAYER_MP_SAVE_LOADED))
+ 	for (auto& item : teamSettings.DefaultItems)
 	{
 		SpawnItemToActor(pA->ID, item.c_str());
 	}
+
+	if (ps && !ps->testFlag(GAME_PLAYER_MP_SAVE_LOADED))
+	{
+		string_path file_name;
+		string32 filename;
+		xr_strcpy(filename, ps->getName());
+		xr_strcat(filename, ".ltx");
+
+		FS.update_path(file_name, "$mp_saves$", filename);
+
+		CInifile* file = xr_new<CInifile>(file_name, true);
+		LoadPlayer(ps, file);
+		ps->setFlag(GAME_PLAYER_MP_SAVE_LOADED);
+ 	}
+
+	signal_Syncronize();
 }
 
 BOOL game_sv_roleplay::OnTouch(u16 eid_who, u16 eid_what, BOOL bForced)
@@ -153,8 +232,37 @@ void game_sv_roleplay::OnDetach(u16 eid_who, u16 eid_what)
 		return;
 	
 	// drop players bag
-	if (e_entity->m_tClassID == CLSID_OBJECT_PLAYERS_BAG)
+ 	xrClientData* data = (xrClientData*) get_client(eid_who);
+
+ 	if (e_entity->m_tClassID == CLSID_OBJECT_PLAYERS_BAG )
 	{
-		OnDetachPlayersBag(e_who, e_entity);
+		if (data)
+			OnDetachPlayersBag(e_who, e_entity);
+		else
+			//DestroyGameItem(e_entity);
+			to_destroy.push_back(e_entity);
 	}
 }
+
+void game_sv_roleplay::OnPlayerDisconnect(ClientID id_who, LPSTR Name, u16 GameID)
+{
+	inherited::OnPlayerDisconnect(id_who, Name, GameID);
+}
+
+void game_sv_roleplay::Update()
+{
+	inherited::Update();
+
+	if (!to_destroy.empty() && Device.dwFrame % 60 == 0)
+	{
+ 		for ( auto ent : to_destroy)
+		{	
+			if (ent)
+				DestroyGameItem(ent);
+		}
+
+		to_destroy.clear();
+	}
+
+}
+

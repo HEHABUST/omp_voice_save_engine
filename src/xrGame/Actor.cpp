@@ -92,7 +92,7 @@ static Fbox		bbCrouchBox;
 static Fvector	vFootCenter;
 static Fvector	vFootExt;
 
-Flags32			psActorFlags={AF_GODMODE_RT|AF_AUTOPICKUP|AF_RUN_BACKWARD|AF_IMPORTANT_SAVE};
+Flags32         psActorFlags = {AF_GODMODE_RT|AF_AUTOPICKUP|AF_RUN_BACKWARD|AF_IMPORTANT_SAVE|AF_DISPLAY_VOICE_ICON};
 int				psActorSleepTime = 1;
 
 
@@ -230,6 +230,33 @@ CActor::~CActor()
 
 	xr_delete				(m_anims);
 //.	xr_delete				(m_vehicle_anims);
+}
+
+bool CActor::MpGodMode() const
+{
+	if (!g_Alive())
+		return false;
+
+	game_PlayerState* ps = Game().GetPlayerByGameID(ID());
+	return (ps && ps->testFlag(GAME_PLAYER_MP_GOD_MODE));
+}
+
+bool CActor::MpNoClip() const
+{
+	if (!g_Alive())
+		return false;
+
+	game_PlayerState* ps = Game().GetPlayerByGameID(ID());
+	return (ps && ps->testFlag(GAME_PLAYER_MP_NO_CLIP));
+}
+
+bool CActor::MpInvisibility() const
+{
+	if (!g_Alive())
+		return false;
+
+	game_PlayerState* ps = Game().GetPlayerByGameID(ID());
+	return (ps && ps->testFlag(GAME_PLAYER_MP_INVIS));
 }
 
 void CActor::reinit	()
@@ -964,6 +991,18 @@ void CActor::g_Physics			(Fvector& _accel, float jump, float dt)
 		character_physics_support()->movement()->GetPosition		(Position());
 #endif //DEBUG
 		character_physics_support()->movement()->bSleep				=false;
+
+		if (MpNoClip())
+		{
+			if (character_physics_support()->movement()->IsCharacterEnabled())
+				character_physics_support()->movement()->DisableCharacter();
+			character_physics_support()->movement()->SetCharacterVelocity({ 0, 0, 0 });
+		}
+		else
+		{
+			if (!character_physics_support()->movement()->IsCharacterEnabled())
+				character_physics_support()->movement()->EnableCharacter();
+		}
 	}
 
 	if (Local() && g_Alive()) 
@@ -1319,7 +1358,7 @@ void CActor::shedule_Update	(u32 DT)
 	//звук тяжелого дыхания при уталости и хромании
 	if(this==Level().CurrentControlEntity() && !g_dedicated_server )
 	{
-		if(conditions().IsLimping() && g_Alive() && !psActorFlags.test(AF_GODMODE_RT)){
+		if(conditions().IsLimping() && g_Alive() && !psActorFlags.test(AF_GODMODE_RT) && !MpGodMode()){
 			if(!m_HeavyBreathSnd._feedback()){
 				m_HeavyBreathSnd.play_at_pos(this, Fvector().set(0,ACTOR_HEIGHT,0), sm_Looped | sm_2D);
 			}else{
@@ -1375,10 +1414,14 @@ void CActor::shedule_Update	(u32 DT)
 		if(!g_Alive()&&m_DangerSnd._feedback())
 			m_DangerSnd.stop();
 	}
-	
+
 	//если в режиме HUD, то сама модель актера не рисуется
 	if(!character_physics_support()->IsRemoved())
 		setVisible				(!HUDview	());
+
+	if (MpInvisibility())
+		setVisible(false);
+
 
 	//что актер видит перед собой
 	collide::rq_result& RQ				= HUD().GetCurrentRayQuery();
@@ -2162,6 +2205,10 @@ void CActor::On_SetEntity()
 }
 
 bool CActor::unlimited_ammo()
-{
-	return !!psActorFlags.test(AF_UNLIMITEDAMMO);
+{							
+	if (!g_Alive())
+		return false;
+
+	game_PlayerState* ps = Game().GetPlayerByGameID(ID());
+	return (ps && ps->testFlag(GAME_PLAYER_MP_NO_UNLIMATED_AMMO));
 }
